@@ -1,214 +1,197 @@
-<!--
-*** Thanks for checking out the Best-README-Template. If you have a suggestion
-*** that would make this better, please fork the repo and create a pull request
-*** or simply open an issue with the tag "enhancement".
-*** Thanks again! Now go create something AMAZING! :D
--->
+## Solution Overview
+My current role focuses on every facet of AWS cost optimization. Much of this entails helping to remediate existing infrastructure and usage. Many customers ask how they can shift left on cloud costs, like they do with security. Ultimately, cost consciousness needs to be injected into every aspect of the engineering lifecycle: from the initial architecture design to implementation and upkeep.
+
+One such aspect is providing developers visibility into the impact of their code changes. Infrastructure as code has made it easy to deploy cloud resources faster and at larger scale than ever before, but this means that cloud bills can also scale up quickly in parallel. This solution demonstrates how to integrate [Infracost](https://www.infracost.io/) into a deployment pipeline to bring cost impact to the pull request process and code review discussion. The source code is [hosted on GitHub](https://github.com/scottenriquez/infracost-cdk-pipeline).
+
+## Solution Architecture 
+This solution deploys several resources:
+- A CodeCommit repository pre-loaded with Terraform code for a VPC, EC2 instance, S3 bucket, and Lambda function to serve as some example infrastructure costs to monitor
+- A CodeBuild project triggered by pull request state changes that analyzes cost changes relative to the `main` branch
+- A CodePipeline with manual approvals to deploy the Terraform for changes pushed to the `main` branch
+- An SNS topic to notify developers of cost changes
+- An S3 bucket to store Terraform state remotely
+- An S3 bucket to store CodePipeline artifacts
 
 
+## Preparing Your Development Environment 
+While this solution is for writing, deploying, and analyzing Terraform HCL syntax, I wrote the infrastructure code for the deployment pipeline and dependent resources using AWS CDK, which is my daily driver for infrastructure as code. Of course, the source code could be rewritten using Terraform or [CDK for Terraform](https://www.terraform.io/cdktf), but I used CDK for the sake of a quick prototype that only creates AWS resources (i.e., no need for additional providers). In addition, Infracost currently only supports Terraform, but there are [plans for CloudFormation and CDK](https://www.infracost.io/docs/supported_resources/overview/) in the future.
 
-<!-- PROJECT SHIELDS -->
-<!--
-*** I'm using markdown "reference style" links for readability.
-*** Reference links are enclosed in brackets [ ] instead of parentheses ( ).
-*** See the bottom of this document for the declaration of the reference variables
-*** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
-*** https://www.markdownguide.org/basic-syntax/#reference-style-links
--->
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url]
+The following dependencies are required to deploy the pipeline infrastructure:
+- An AWS account
+- Node.js
+- Terraform
+- [AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)
+- [An Infracost API key](https://www.infracost.io/docs/)
+- [Source code](https://github.com/scottenriquez/infracost-cdk-pipeline)
 
+Rather than installing Node.js, CDK, Terraform, and all other dependencies on your local machine, you can alternatively create a [Cloud9 IDE](https://aws.amazon.com/cloud9/) with these pre-installed via the Console or with a CloudFormation template:
+```yaml
+Resources:
+  rCloud9Environment:
+    Type: AWS::Cloud9::EnvironmentEC2
+    Properties:
+      AutomaticStopTimeMinutes: 30
+      ConnectionType: CONNECT_SSH 
+      Description: Environment for writing and deploying CDK 
+      # AWS Free Tier eligible
+      InstanceType: t2.micro	
+      Name: InfracostCDKPipelineCloud9Environment
+      # https://docs.aws.amazon.com/cloud9/latest/user-guide/vpc-settings.html#vpc-settings-create-subnet
+      SubnetId: subnet-EXAMPLE 
+```
 
+## Installation, Deployment, and Configuration
+Before deploying the CDK application, [store the Infracost API key in an SSM parameter](https://docs.aws.amazon.com/systems-manager/latest/userguide/parameter-create-console.html) `SecureString` called `/terraform/infracost/api_key`.
 
-<!-- PROJECT LOGO -->
-<br />
-<p align="center">
-  <a href="https://github.com/othneildrew/Best-README-Template">
-    <img src="images/logo.png" alt="Logo" width="80" height="80">
-  </a>
+To install and deploy the pipeline, use the following commands:
+```shell
+git clone https://github.com/scottenriquez/infracost-cdk-pipeline.git
+cd infracost-cdk-pipeline/infracost-cdk-pipeline/
+npm install
+# https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html
+cdk bootstrap
+cdk deploy
+```
 
-  <h3 align="center">Best-README-Template</h3>
+Before testing the pipeline, [subscribe to the SNS topic via the Console](https://docs.aws.amazon.com/sns/latest/dg/sns-create-subscribe-endpoint-to-topic.html). For testing purposes, use email to get the cost change data delivered.
 
-  <p align="center">
-    An awesome README template to jumpstart your projects!
-    <br />
-    <a href="https://github.com/othneildrew/Best-README-Template"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    <a href="https://github.com/othneildrew/Best-README-Template">View Demo</a>
-    ·
-    <a href="https://github.com/othneildrew/Best-README-Template/issues">Report Bug</a>
-    ·
-    <a href="https://github.com/othneildrew/Best-README-Template/issues">Request Feature</a>
-  </p>
-</p>
+## Using the Deployment Pipeline
+The CodePipeline is triggered at creation, but there are manual approval stages to prevent any infrastructure from being created without intervention. Feel free to deploy the Terraform, but it is not required for generating cost differences via a pull request. The CodePipeline is triggered by changes to `main`.
 
+Make some code changes to see the cost impact. To modify the Terraform code, either use the CodeCommit GUI in the Console or clone the repository to your development environment. First, create a branch called `feature` off of `main`. Then modify `ec2.tf` to use a different instance type:
+```hcl
+resource "aws_instance" "server" {
+  # Amazon Linux 2 Kernel 5.10 AMI 2.0.20220606.1 x86_64 HVM in us-east-1
+  # if deploying outside of us-east-1, you must use the corresponding AL2 AMI for your region
+  ami           = "ami-0cff7528ff583bf9a"
+  # changed from t3.micro
+  instance_type = "m5.large"
+  subnet_id     = module.vpc.private_subnets[0]
 
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = 50
+  }
+}
+```
 
-<!-- TABLE OF CONTENTS -->
-<details open="open">
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
-    <li><a href="#usage">Usage</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
-    <li><a href="#contact">Contact</a></li>
-    <li><a href="#acknowledgements">Acknowledgements</a></li>
-  </ol>
-</details>
+Infracost also supports usage estimates in addition to resource costs. For example, changing the storage GBs for the S3 bucket in `infracost-usage.yml` will also update the cost comparison and estimate. These values are hardcoded and version-controlled here, but Infracost is also [experimenting with fetching actual usage data via CloudWatch](https://www.infracost.io/docs/features/usage_based_resources/).
 
+```yaml
+version: 0.1
+resource_usage:
+  aws_lambda_function.function:
+    monthly_requests: 10000 
+    request_duration_ms: 250
+  aws_s3_bucket.bucket:
+    standard:
+      # changed from 10000
+      storage_gb: 15000
+      monthly_tier_1_requests: 1000 
+```
 
+Commit these changes to the `feature` branch and open a pull request. Doing so will trigger the CodeBuild project that computes the cost delta and publishes the payload to the SNS topic if the amount increases. Assuming you subscribed to the SNS topic via email, some JSON should be in your inbox. Here's an abridged example output:
+```json
+{
+	"version": "0.2",
+	"currency": "USD",
+	"projects": [{
+		"name": "codecommit::us-east-1://TerraformRepository/.",
+		"metadata": {
+			"path": "/tmp/main",
+			"infracostCommand": "breakdown",
+			"type": "terraform_dir",
+			"branch": "main",
+			"commit": "2e6eafd94811a0c9ac814a8c31132dc3badc0b9f",
+			"commitAuthorName": "AWS CodeCommit",
+			"commitAuthorEmail": "noreply-awscodecommit@amazon.com",
+			"commitTimestamp": "2022-07-16T05:47:50Z",
+			"commitMessage": "Initial commit by AWS CodeCommit",
+			"vcsRepoUrl": "codecommit::us-east-1://TerraformRepository",
+			"vcsSubPath": "."
+		}
+	}],
+	"totalHourlyCost": "0.41661461198630137000733251",
+	"totalMonthlyCost": "304.12866675",
+	"pastTotalHourlyCost": "0.33101461198630137000733251",
+	"pastTotalMonthlyCost": "241.64066675",
+	"diffTotalHourlyCost": "0.0856",
+	"diffTotalMonthlyCost": "62.488",
+	"timeGenerated": "2022-07-16T06:21:02.155239211Z",
+	"summary": {
+		"totalDetectedResources": 3,
+		"totalSupportedResources": 3,
+		"totalUnsupportedResources": 0,
+		"totalUsageBasedResources": 3,
+		"totalNoPriceResources": 0,
+		"unsupportedResourceCounts": {},
+		"noPriceResourceCounts": {}
+	}
+}
+```
 
-<!-- ABOUT THE PROJECT -->
-## About The Project
+## Diving Into the Pull Request Build Logic
+The TypeScript for describing the deployment pipeline lives in `infracost-cdk-pipeline-stack.ts`. The following code snippet (with comments explaining the `install` and `build` phases) contains the core logic for integrating Infracost into the pull request: 
+```typescript
+const pullRequestCodeBuildProject = new codebuild.Project(this, 'TerraformPullRequestCodeBuildProject', {
+    buildSpec: codebuild.BuildSpec.fromObject({
+        version: '0.2',
+        phases: {
+            install: {
+                commands: [
+                    // checkout the feature branch
+                    'git checkout $CODEBUILD_SOURCE_VERSION',
+                    'sudo yum -y install unzip python3-pip jq',
+                    'sudo pip3 install git-remote-codecommit',
+                    `wget https://releases.hashicorp.com/terraform/${terraformVersion}/terraform_${terraformVersion}_linux_amd64.zip`,
+                    `unzip terraform_${terraformVersion}_linux_amd64.zip`,
+                    'sudo mv terraform /usr/local/bin/',
+                    'curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh',
+                    // clone the main branch
+                    `git clone ${terraformRepository.repositoryCloneUrlGrc} --branch=${mainBranchName} --single-branch /tmp/main`,
+                    // generate Infracost baseline file for main
+                    'infracost breakdown --path /tmp/main --usage-file infracost-usage.yml --format json --out-file infracost-main.json'
+                ]
+            },
+            build: {
+                commands: [
+                    // initialize Terraform with remote state
+                    `terraform init -backend-config="bucket=${terraformStateBucket.bucketName}"`,
+                    'terraform plan',
+                    // compute diff based on baseline created from main
+                    'infracost diff --path . --compare-to infracost-main.json --usage-file infracost-usage.yml --format json --out-file infracost-pull-request.json',
+                    // parse JSON to get total monthly difference
+                    `DIFF_TOTAL_MONTHLY_COST=$(jq '.diffTotalMonthlyCost | tonumber | floor' infracost-pull-request.json)`,
+                    // if there's a cost increase, publish the diff to the SNS topic
+                    `if [[ $DIFF_TOTAL_MONTHLY_COST -gt 0 ]]; then aws sns publish --topic-arn ${terraformCostTopic.topicArn} --message file://infracost-pull-request.json; fi`
+                ]
+            }
+        }
+    })
+});
+```
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
+More advanced notification logic, such as using the percentage increase for an alert threshold, could be implemented to minimize noise for developers. Additionally, offloading the logic to a Lambda function and invoking it via the CLI or SNS would allow for more robust and testable logic than a simple shell script. Alternatively, the cost delta could be added as a comment on the source pull request. Choose the option that makes the most sense for your code review process.
 
-There are many great README templates available on GitHub, however, I didn't find one that really suit my needs so I created this enhanced one. I want to create a README template so amazing that it'll be the last one you ever need -- I think this is it.
+## Conclusion
+Technology alone will not resolve all cost optimization challenges. However, integrating cost analysis into code reviews is integral to shaping a cost-conscious culture. It is much better to find and address cost spikes before infrastructure is deployed. Seeing a large cost increase from `infracost diff` is scary, but seeing it in Cost Explorer later is far scarier.
 
-Here's why:
-* Your time should be focused on creating something amazing. A project that solves a problem and helps others
-* You shouldn't be doing the same tasks over and over like creating a README from scratch
-* You should element DRY principles to the rest of your life :smile:
+## Cleanup
+If you deployed resources via the deployment pipeline, be sure to either use the `DestroyTerraform` CodeBuild project or run:
+```shell
+# set the bucket name variable or replace with a value
+# the bucket name nomenclature is 'terraform-state-' followed by a UUID
+# this can also be found via the Console
+terraform init -backend-config="bucket=$TERRAFORM_STATE_S3_BUCKET_NAME"
+terraform destroy
+```
 
-Of course, no one template will serve all projects since your needs may be different. So I'll be adding more in the near future. You may also suggest changes by forking this repo and creating a pull request or opening an issue. Thanks to all the people have have contributed to expanding this template!
+To destroy the pipeline itself run:
+```shell
+cdk destroy
+```
 
-A list of commonly used resources that I find helpful are listed in the acknowledgements.
+If you spun up a Cloud9 environment, be sure to delete that as well.
 
-### Built With
-
-This section should list any major frameworks that you built your project using. Leave any add-ons/plugins for the acknowledgements section. Here are a few examples.
-* [Bootstrap](https://getbootstrap.com)
-* [JQuery](https://jquery.com)
-* [Laravel](https://laravel.com)
-
-
-
-<!-- GETTING STARTED -->
-## Getting Started
-
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
-
-### Prerequisites
-
-This is an example of how to list things you need to use the software and how to install them.
-* npm
-  ```sh
-  npm install npm@latest -g
-  ```
-
-### Installation
-
-1. Get a free API Key at [https://example.com](https://example.com)
-2. Clone the repo
-   ```sh
-   git clone https://github.com/your_username_/Project-Name.git
-   ```
-3. Install NPM packages
-   ```sh
-   npm install
-   ```
-4. Enter your API in `config.js`
-   ```JS
-   const API_KEY = 'ENTER YOUR API';
-   ```
-
-
-
-<!-- USAGE EXAMPLES -->
-## Usage
-
-Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
-
-_For more examples, please refer to the [Documentation](https://example.com)_
-
-
-
-<!-- ROADMAP -->
-## Roadmap
-
-See the [open issues](https://github.com/othneildrew/Best-README-Template/issues) for a list of proposed features (and known issues).
-
-
-
-<!-- CONTRIBUTING -->
-## Contributing
-
-Contributions are what make the open source community such an amazing place to be learn, inspire, and create. Any contributions you make are **greatly appreciated**.
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-
-
-<!-- LICENSE -->
-## License
-
-Distributed under the MIT License. See `LICENSE` for more information.
-
-
-
-<!-- CONTACT -->
-## Contact
-
-Your Name - [@your_twitter](https://twitter.com/your_username) - email@example.com
-
-Project Link: [https://github.com/your_username/repo_name](https://github.com/your_username/repo_name)
-
-
-
-<!-- ACKNOWLEDGEMENTS -->
-## Acknowledgements
-* [GitHub Emoji Cheat Sheet](https://www.webpagefx.com/tools/emoji-cheat-sheet)
-* [Img Shields](https://shields.io)
-* [Choose an Open Source License](https://choosealicense.com)
-* [GitHub Pages](https://pages.github.com)
-* [Animate.css](https://daneden.github.io/animate.css)
-* [Loaders.css](https://connoratherton.com/loaders)
-* [Slick Carousel](https://kenwheeler.github.io/slick)
-* [Smooth Scroll](https://github.com/cferdinandi/smooth-scroll)
-* [Sticky Kit](http://leafo.net/sticky-kit)
-* [JVectorMap](http://jvectormap.com)
-* [Font Awesome](https://fontawesome.com)
-
-
-
-
-
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[contributors-shield]: https://img.shields.io/github/contributors/othneildrew/Best-README-Template.svg?style=for-the-badge
-[contributors-url]: https://github.com/othneildrew/Best-README-Template/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/othneildrew/Best-README-Template.svg?style=for-the-badge
-[forks-url]: https://github.com/othneildrew/Best-README-Template/network/members
-[stars-shield]: https://img.shields.io/github/stars/othneildrew/Best-README-Template.svg?style=for-the-badge
-[stars-url]: https://github.com/othneildrew/Best-README-Template/stargazers
-[issues-shield]: https://img.shields.io/github/issues/othneildrew/Best-README-Template.svg?style=for-the-badge
-[issues-url]: https://github.com/othneildrew/Best-README-Template/issues
-[license-shield]: https://img.shields.io/github/license/othneildrew/Best-README-Template.svg?style=for-the-badge
-[license-url]: https://github.com/othneildrew/Best-README-Template/blob/master/LICENSE.txt
-[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
-[linkedin-url]: https://linkedin.com/in/othneildrew
-[product-screenshot]: images/screenshot.png
+## Disclaimer
+At the time of writing this blog post, I currently work for Amazon Web Services. The opinions and views expressed here are my own and not the views of my employer.
