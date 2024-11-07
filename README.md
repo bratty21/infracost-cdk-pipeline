@@ -1,7 +1,7 @@
 ## Solution Overview
 My current role focuses on every facet of AWS cost optimization. Much of this entails helping to remediate existing infrastructure and usage. Many customers ask how they can shift left on cloud costs, like they do with security. Ultimately, cost consciousness needs to be injected into every aspect of the engineering lifecycle: from the initial architecture design to implementation and upkeep.
 
-One such aspect is providing developers visibility into the impact of their code changes. Infrastructure as code has made it easy to deploy cloud resources faster and at larger scale than ever before, but this means that cloud bills can also scale up quickly in parallel. This solution demonstrates how to integrate [Infracost](https://www.infracost.io/) into a deployment pipeline to bring cost impact to the pull request process and code review discussion. The source code is [hosted on GitHub](https://github.com/scottenriquez/infracost-cdk-pipeline).
+One such aspect is providing developers visibility into the impact of their code changes. Infrastructure as code has made it easy to deploy cloud resources faster and at larger scale than ever before, but this means that cloud bills can also scale up quickly in parallel. This solution demonstrates how to integrate [Infracost](https://www.infracost.io/) into a deployment pipeline to bring cost impact to the pull request process and code review discussion. The source code is [hosted on GitHub](https://github.com/bratty21/infracost-cdk-pipeline).
 
 ## Solution Architecture 
 This solution deploys several resources:
@@ -22,7 +22,7 @@ The following dependencies are required to deploy the pipeline infrastructure:
 - Terraform
 - [AWS CDK](https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html)
 - [An Infracost API key](https://www.infracost.io/docs/)
-- [Source code](https://github.com/scottenriquez/infracost-cdk-pipeline)
+- [Source code](https://github.com/bratty21/infracost-cdk-pipeline)
 
 Rather than installing Node.js, CDK, Terraform, and all other dependencies on your local machine, you can alternatively create a [Cloud9 IDE](https://aws.amazon.com/cloud9/) with these pre-installed via the Console or with a CloudFormation template:
 ```yaml
@@ -45,7 +45,7 @@ Before deploying the CDK application, [store the Infracost API key in an SSM par
 
 To install and deploy the pipeline, use the following commands:
 ```shell
-git clone https://github.com/scottenriquez/infracost-cdk-pipeline.git
+git clone https://github.com/bratty21/infracost-cdk-pipeline.git
 cd infracost-cdk-pipeline/infracost-cdk-pipeline/
 npm install
 # https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html
